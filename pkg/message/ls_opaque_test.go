@@ -71,7 +71,10 @@ func TestProcessMPUpdateLSOpaque(t *testing.T) {
 					t.Errorf("message %d topic = %d, want %d", i, publisher.msgs[i].msgType, want)
 				}
 			}
-			var got LSOpaque
+			var got struct {
+				LSOpaque
+				RawRD json.RawMessage `json:"route_distinguisher_raw"`
+			}
 			if err := json.Unmarshal(publisher.msgs[len(publisher.msgs)-1].payload, &got); err != nil {
 				t.Fatalf("published LSOpaque JSON: %v", err)
 			}
@@ -81,6 +84,9 @@ func TestProcessMPUpdateLSOpaque(t *testing.T) {
 			}
 			if got.PeerASN != 65000 {
 				t.Errorf("published LSOpaque PeerASN = %d, want 65000", got.PeerASN)
+			}
+			if tt.safi != 72 && got.RawRD != nil {
+				t.Errorf("published route_distinguisher_raw = %s for SAFI %d, want absent", got.RawRD, tt.safi)
 			}
 		})
 	}

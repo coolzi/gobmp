@@ -31,6 +31,10 @@ Unknown NLRI types are preserved as opaque objects, following RFC 9552
 section 5.2. Their body bytes are copied and published as hexadecimal
 `LSOpaque.nlri` data, with SAFI 72 and the RD represented separately. An
 unknown type with an empty body still carries an RD and has Length 8.
+Opaque SAFI 72 records carry the eight wire bytes of the RD as lowercase hex
+in `route_distinguisher_raw`. Use this field to compare RDs byte for byte.
+`route_distinguisher` remains the display value, which can be identical for
+distinct encodings such as type 0 and type 2 (RFC 4364 §4.2).
 Type 7 remains opaque under SAFI 72. This framing correction does not add
 typed VPN Inter-AS support or define VPN half-link correlation semantics;
 those remain the subject of [issue #478](https://github.com/sbezverk/gobmp/issues/478).

@@ -114,6 +114,56 @@ func TestProcessMPUpdateSAFI72Wire(t *testing.T) {
 	}
 }
 
+func TestProcessMPUpdateSAFI72OpaqueDistinctRDs(t *testing.T) {
+	// RFC 4364 §4.2: both RDs display as 65000:1, but their types differ.
+	payload := []byte{
+		0, 7, 0, 9, 0, 0, 0xfd, 0xe8, 0, 0, 0, 1, 0xab,
+		0, 7, 0, 9, 0, 2, 0, 0, 0xfd, 0xe8, 0, 1, 0xab,
+	}
+	for _, withdraw := range []bool{false, true} {
+		t.Run(fmt.Sprintf("withdraw=%t", withdraw), func(t *testing.T) {
+			var nlri bgp.MPNLRI
+			var err error
+			operation, action := AddPrefix, "add"
+			if withdraw {
+				nlri, err = bgp.UnmarshalMPUnReachNLRI(append([]byte{0x40, 0x04, 72}, payload...), nil)
+				operation, action = DelPrefix, "del"
+			} else {
+				// RFC 9552 §5.5: zero RD followed by the IPv4 VPN next hop.
+				header := []byte{0x40, 0x04, 72, 12, 0, 0, 0, 0, 0, 0, 0, 0, 192, 0, 2, 2, 0}
+				nlri, err = bgp.UnmarshalMPReachNLRI(append(header, payload...), false, nil)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			publisher := &recordingPublisher{}
+			p := &producer{publisher: publisher}
+			p.processMPUpdate(nlri, operation, minimalPeerHeader(), minimalUpdate())
+
+			wantRawRDs := []string{"0000fde800000001", "00020000fde80001"}
+			if len(publisher.msgs) != len(wantRawRDs) {
+				t.Fatalf("published %d messages, want %d", len(publisher.msgs), len(wantRawRDs))
+			}
+			for i, want := range wantRawRDs {
+				msg := publisher.msgs[i]
+				if msg.msgType != bmp.LSOpaqueMsg {
+					t.Fatalf("message %d type = %d, want LSOpaqueMsg", i, msg.msgType)
+				}
+				var got struct {
+					LSOpaque
+					RawRD string `json:"route_distinguisher_raw"`
+				}
+				if err := json.Unmarshal(msg.payload, &got); err != nil {
+					t.Fatal(err)
+				}
+				if got.RawRD != want || got.RD != "65000:1" || got.NLRI != "ab" || got.Action != action {
+					t.Errorf("message %d: %s, want raw RD %s, display RD 65000:1, body ab, action %s", i, msg.payload, want, action)
+				}
+			}
+		})
+	}
+}
+
 func TestProcessMPUpdateSAFI72MalformedWire(t *testing.T) {
 	for _, withdraw := range []bool{false, true} {
 		t.Run(fmt.Sprintf("withdraw=%t", withdraw), func(t *testing.T) {
